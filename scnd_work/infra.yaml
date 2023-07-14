@@ -1,0 +1,177 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Testing Creation of VPc,subnet,Route Table, Sec-Groups, EC2-Instances etc"
+Resources:
+  # First, a VPC:
+  VPC:
+    Type: AWS::EC2::VPC
+    Description: "VPC"
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value:  !Join ['-', ["Test", "VPC" ]]
+  # VPC Internet access:
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    DependsOn: VPC
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Join ['-', ["Test", "IGW" ]]
+    
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    DependsOn: InternetGateway
+    # you can't attach an IGW to a VPC unless both are created
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [ 0, !GetAZs ]    # Get the first AZ in the list
+      MapPublicIpOnLaunch: true
+
+      Tags:
+      - Key: Name
+        Value: !Join ['-', ["Test", "Public-A" ]]  
+  # Some route tables for our subnets:
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Join ['-', ["Test", "Public-RT-1" ]]
+  
+  PublicRoute1:   # Public route table has direct routing to IGW:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway 
+  
+  PublicSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+  
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow SSH access"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: tcp
+          FromPort: '8080'
+          ToPort: '8080'
+          CidrIp: "0.0.0.0/0"
+
+  # Role for S3Role
+  S3Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: !Join ['', ["Test-", "-S3-Policy" ]]
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:*'
+                Resource: '*'
+  S3InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref S3Role
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-0c65adc9a5c1b5d7c
+      InstanceType: t3a.medium
+      SubnetId: !Ref PublicSubnetA
+      KeyName:  <SSH-Key-Name>
+      IamInstanceProfile: !Ref S3InstanceProfile
+      SecurityGroupIds: 
+        - !Ref SecurityGroup
+      Tags:
+      - Key: Name
+        Value:  !Join ['', ["Test-", "-WebServer-EC2" ]]
+      UserData:
+        Fn::Base64: |
+            #!/bin/bash
+
+            sudo apt-get update -y 
+            sudo apt update -y 
+            sudo apt install unzip
+            sudo apt install maven -y
+
+            # install aws cli
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+
+            cd /root/
+            # Get binaries from S3
+            aws s3 cp s3://java-test-pro-buck/springboot-master/ . --recursive
+
+            chmod +x mvnw
+
+            # build mvn
+            ./mvnw -Dmaven.test.failure.ignore=true clean package
+
+
+            # systemd service
+
+            # Create a systemd service file
+            SERVICE_FILE="/etc/systemd/system/mvntest.service"
+
+            # Create the systemd service file
+            cat << EOF > $SERVICE_FILE
+            [Unit]
+            Description=My Service
+            After=network.target
+
+            [Service]
+            ExecStart=/bin/bash -c "java -jar /root/target/demo-0.0.1-SNAPSHOT.jar >> /root/output.log"
+            WorkingDirectory=/root
+            Restart=always
+
+            [Install]
+            WantedBy=default.target
+            EOF
+
+
+            # Reload the systemd daemon to read the new service file
+            systemctl daemon-reload -y
+
+            # Enable and start the service
+            systemctl enable mvntest.service
+            systemctl start mvntest.service
+Outputs:
+  InstanceIP:
+    Value: !GetAtt Instance.PublicIp
