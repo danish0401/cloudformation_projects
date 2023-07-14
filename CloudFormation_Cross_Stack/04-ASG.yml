@@ -1,0 +1,427 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Testing Creation of VPc,subnet,Route Table, Sec-Groups, EC2-Instances, DB instances etc"
+# This CloudFormation template deploys a basic VPC / Network. 
+
+Parameters:
+  # InstanceTypeParameter:
+  #   Type: String
+  #   Default: t2.micro
+  #   AllowedValues:
+  #     - t2.micro
+  #     - m1.small
+  #     - m1.large
+  #   Description: Enter t2.micro, m1.small, or m1.large. Default is t2.micro.
+  
+  # EC2KeyName:
+  #   Description: Name of an EC2 KeyPair to enable SSH access to the instance.
+  #   Type: AWS::EC2::KeyPair::KeyName
+  #   ConstraintDescription: Must be the name of an existing EC2 KeyPair.
+  
+  OperatorEMail:
+    Description: A valid EMail address to notify if there are any scaling operations
+    Type: String
+  
+  Environment:
+    Type: String
+    Default: Test
+    AllowedValues:
+      - Test
+      - Production
+      - Development
+    Description: Enter Environment name for your Stack. Default is Test.
+
+# Mappings:
+#   MyRegionMap:
+#     us-west-2:
+#       HVM64: ami-098e42ae54c764c35
+#     us-east-2:
+#       HVM64: ami-0cd3dfa4e37921605
+#     us-west-1:
+#       HVM64: ami-0ec6517f6edbf8044    
+
+
+Resources:
+# # #Create an Application Load Balancer
+#   ApplicationLoadBalancer:
+#     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+#     # DependsOn: InternetGateway
+#     Properties:
+#       Name: !Join ['', ["Danish-", !Ref Environment, "-ALB" ]]
+#       Scheme: internet-facing
+#       Type: application
+#       SecurityGroups:
+#         - Fn::ImportValue:
+#             !Join ['', ["Danish-", !Ref Environment, "-ALB-Sec-Group" ]]
+#       Subnets: 
+#         - Fn::ImportValue:
+#             !Join ['-', ["Danish", !Ref Environment, "Public-A" ]]
+#         - Fn::ImportValue:
+#             !Join ['-', ["Danish", !Ref Environment, "Public-B" ]]
+
+#   ALBListner:
+#     Type: AWS::ElasticLoadBalancingV2::Listener
+#     Properties:
+#       DefaultActions:
+#         - Type: forward 
+#           TargetGroupArn: !Ref ALBTargetGroup
+#       LoadBalancerArn: !Ref ApplicationLoadBalancer
+#       Port: 80
+#       Protocol: HTTP
+
+# # Create a Target Group
+#   ALBTargetGroup:
+#     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+#     Properties:
+#       HealthCheckIntervalSeconds: 10
+#       HealthCheckPath: /
+#       HealthCheckTimeoutSeconds: 5
+#       HealthyThresholdCount: 2
+#       Matcher:
+#         HttpCode: 200
+#       Name: !Join ['', ["Danish-", !Ref Environment, "-Server-TG" ]]
+#       Port: 80
+#       Protocol: HTTP
+#       TargetType: instance
+#       UnhealthyThresholdCount: 5
+#       VpcId:
+#         Fn::ImportValue: 
+#           !Join ['-', ["Danish", !Ref Environment, "VPC" ]]
+#       TargetGroupAttributes:
+#         - Key: deregistration_delay.timeout_seconds
+#           Value: '60'
+
+# # Internal Network Load Balancer
+#   NetworkLoadBalancer:
+#     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+#     Properties:
+#       Name: !Join ['', ["Danish-", !Ref Environment, "-NLB" ]]
+#       Scheme: internal
+#       Type: network
+#       Subnets: 
+#         - Fn::ImportValue:
+#             !Join ['-', ["Danish", !Ref Environment, "Private-B" ]]
+#         - Fn::ImportValue:
+#             !Join ['-', ["Danish", !Ref Environment, "Private-A" ]]
+
+#   NLBListner:
+#     Type: AWS::ElasticLoadBalancingV2::Listener
+#     Properties:
+#       DefaultActions:
+#         - Type: forward 
+#           TargetGroupArn: !Ref NLBTargetGroup
+#       LoadBalancerArn: !Ref NetworkLoadBalancer
+#       Port: 3306
+#       Protocol: TCP
+
+# # Create a Target Group
+#   NLBTargetGroup:
+#     Type: AWS::ElasticLoadBalancingV2::TargetGroup
+#     Properties:
+#       HealthCheckIntervalSeconds: 30
+#       HealthCheckTimeoutSeconds: 10
+#       HealthyThresholdCount: 3
+#       UnhealthyThresholdCount: 3
+#       HealthCheckProtocol: TCP
+#       Name: !Join ['', ["Danish-", !Ref Environment, "-DB-TG" ]]
+#       Port: 3306
+#       Protocol: TCP
+#       Targets:
+#         - Id: !Ref MyDBInstance
+#           Port: 3306
+#       TargetType: instance
+#       VpcId: 
+#         Fn::ImportValue: 
+#           !Join ['-', ["Danish", !Ref Environment, "VPC" ]]
+
+
+#   # Role for SSM
+#   SSMRole:
+#     Type: 'AWS::IAM::Role'
+#     Properties:
+#       AssumeRolePolicyDocument:
+#         Version: "2012-10-17"
+#         Statement:
+#           - Effect: Allow
+#             Principal:
+#               Service:
+#                 - ec2.amazonaws.com
+#             Action:
+#               - 'sts:AssumeRole'
+#       Path: /
+#       Policies:
+#         - PolicyName: !Join ['', ["Danish-", !Ref Environment, "-SSM-Policy" ]]
+#           PolicyDocument:
+#             Version: "2012-10-17"
+#             Statement:
+#               - Effect: Allow
+#                 Action:
+#                   - 'ssm:DescribeAssociation'
+#                   - 'ssm:GetParameter'
+#                   - 'ssm:GetParameters'
+#                 Resource: '*'
+#   SSMInstanceProfile:
+#     Type: 'AWS::IAM::InstanceProfile'
+#     Properties:
+#       Path: /
+#       Roles:
+#         - !Ref SSMRole
+
+# # A Public Instance used to SSH in Private Resources
+#   MyPublicInstance:
+#     Type: AWS::EC2::Instance
+#     Properties:
+#       ImageId: !FindInMap
+#         - MyRegionMap
+#         - !Ref 'AWS::Region'
+#         - HVM64
+#       InstanceType: !Ref InstanceTypeParameter
+#       SubnetId:
+#         Fn::ImportValue:
+#           !Join ['-', ["Danish", !Ref Environment, "Public-A" ]]
+#       KeyName:  !Ref EC2KeyName
+#       IamInstanceProfile: !Ref SSMInstanceProfile
+#       SecurityGroupIds:
+#         - Fn::ImportValue:
+#             !Join ['', [ "Danish-", !Ref Environment, "-Server-Sec-Group" ]]
+#       Tags:
+#       - Key: Name
+#         Value:  !Join ['', ["Danish-", !Ref Environment, "-Public-EC2" ]]
+#       UserData:
+#         Fn::Base64: |
+#             #!/bin/bash
+#             # yum install httpd -y
+
+# # Launch Template for WebServers
+#   WebServerLaunchTemplate:
+#     Type: AWS::EC2::LaunchTemplate
+#     Properties:
+#       LaunchTemplateName: !Join ['', ["Danish-", !Ref Environment, "-ASG-LT" ]]
+#       LaunchTemplateData:
+#         ImageId: !FindInMap
+#           - MyRegionMap
+#           - !Ref 'AWS::Region'
+#           - HVM64
+#         InstanceType: !Ref InstanceTypeParameter
+#         KeyName: !Ref EC2KeyName
+#         IamInstanceProfile:
+#           Name: !Ref SSMInstanceProfile        
+#         Monitoring:
+#           Enabled: true
+#         SecurityGroupIds: 
+#           - Fn::ImportValue:
+#               !Join ['', ["Danish-", !Ref Environment, "-Server-Sec-Group" ]]
+#         UserData:
+#           Fn::Base64: 
+#              !Sub |
+#               #!/bin/bash
+#               curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+#               unzip awscliv2.zip
+#               ./aws/install
+#               db_username=$(aws ssm get-parameter --name db_username --query 'Parameter.Value' --region us-west-2 --output text)
+#               db_user_password=$(aws ssm get-parameter --name db_user_password --query 'Parameter.Value' --region us-west-2 --output text)
+#               db_name=$(aws ssm get-parameter --name db_name --query 'Parameter.Value' --region us-west-2 --output text)
+#               export db_host="${NetworkLoadBalancer.DNSName}"
+#               yum install amazon-linux-extras httpd -y
+#               amazon-linux-extras install php7.2 -y
+#               yum install httpd -y
+#               systemctl start httpd
+#               systemctl enable httpd
+#               cd /var/www/html
+#               wget https://wordpress.org/latest.tar.gz
+#               tar -xzf latest.tar.gz
+#               cp -r wordpress/* /var/www/html/
+#               rm -rf wordpress
+#               rm -rf latest.tar.gz
+#               cp wp-config-sample.php wp-config.php
+#               sed -i "s/database_name_here/$db_name/g" wp-config.php
+#               sed -i "s/username_here/$db_username/g" wp-config.php
+#               sed -i "s/password_here/$db_user_password/g" wp-config.php
+#               sed -i "s/localhost/$db_host/g" wp-config.php
+#               #sed -i "s/wp_/wp_/g" wp-config.php
+#               chmod -R 755 /var/www/html/*
+#               chown -R apache:apache /var/www/html/*
+#               #  enable .htaccess files in Apache config using sed command
+#               sed -i '/<Directory "\/var\/www\/html">/,/<\/Directory>/ s/AllowOverride None/AllowOverride all/' /etc/httpd/conf/httpd.conf
+#               #Make apache to autostart and restart apache
+#               systemctl enable  httpd.service
+#               systemctl restart httpd.service
+#               service httpd start      
+
+
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref OperatorEMail
+          Protocol: email
+
+  WebServerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: !Join ['', ["Danish-", !Ref Environment, "-WebServer-ASG" ]]
+      VPCZoneIdentifier:
+        - Fn::ImportValue:
+            !Join ['-', ["Danish", !Ref Environment, "Private-A" ]]
+        - Fn::ImportValue:
+            !Join ['-', ["Danish", !Ref Environment, "Private-B" ]]
+      HealthCheckGracePeriod: 120
+      HealthCheckType: ELB
+      LaunchTemplate:
+        LaunchTemplateId: 
+          Fn::ImportValue:
+            !Join ['', ["Danish-", !Ref Environment, "-ASG-LT" ]]
+        Version:
+          Fn::ImportValue:
+            !Join ['', ["Danish-", !Ref Environment, "-ASG-LT-v" ]]
+      MinSize: 2
+      MaxSize: 4
+      DesiredCapacity: 3
+      Tags:
+        - Key: Name
+          Value: !Join ['-', ["Danish", !Ref Environment, "WebServer-ASG" ]]
+          PropagateAtLaunch: true
+      TargetGroupARNs:
+        - Fn::ImportValue:
+            !Join ['', ["Danish-", !Ref Environment, "-Server-TG" ]]
+      NotificationConfiguration:
+        TopicARN: !Ref NotificationTopic
+        NotificationTypes:
+          - 'autoscaling:EC2_INSTANCE_LAUNCH'
+          - 'autoscaling:EC2_INSTANCE_LAUNCH_ERROR'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE'
+          - 'autoscaling:EC2_INSTANCE_TERMINATE_ERROR'
+
+  WebServerScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      PolicyType: StepScaling
+      StepAdjustments:
+        - MetricIntervalLowerBound: 0
+          MetricIntervalUpperBound: 10
+          ScalingAdjustment: 0
+        - MetricIntervalLowerBound: 10
+          MetricIntervalUpperBound: 20
+          ScalingAdjustment: 10
+        - MetricIntervalLowerBound: 20
+          ScalingAdjustment: 30
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      Cooldown: 60
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '2'
+      Statistic: Maximum
+      Threshold: '60'
+      AlarmDescription: 'Scale out if CPU > 60% for 2 minutes'
+      Period: '60'
+      AlarmActions:
+      - !Ref WebServerScaleUpPolicy
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerAutoScalingGroup
+      ComparisonOperator: GreaterThanThreshold
+      MetricName: CPUUtilization
+
+  WebServerScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: PercentChangeInCapacity
+      PolicyType: StepScaling
+      StepAdjustments:
+        - MetricIntervalLowerBound: -10
+          MetricIntervalUpperBound: 0
+          ScalingAdjustment: 0
+        - MetricIntervalLowerBound: -20
+          MetricIntervalUpperBound: -10
+          ScalingAdjustment: -10
+        - MetricIntervalUpperBound: -20
+          ScalingAdjustment: -30
+      AutoScalingGroupName: !Ref WebServerAutoScalingGroup
+      Cooldown: 60
+
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      EvaluationPeriods: '2'
+      Statistic: Maximum
+      Threshold: '40'
+      AlarmDescription: 'Scale out if CPU < 60% for 2 minutes'
+      Period: '60'
+      AlarmActions:
+      - !Ref WebServerScaleDownPolicy
+      Namespace: AWS/EC2
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref WebServerAutoScalingGroup
+      ComparisonOperator: LessThanThreshold
+      MetricName: CPUUtilization
+
+  # MyDBInstance:
+  #   Type: AWS::EC2::Instance
+  #   Properties:
+  #     ImageId: !FindInMap
+  #       - MyRegionMap
+  #       - !Ref 'AWS::Region'
+  #       - HVM64
+  #     InstanceType: !Ref InstanceTypeParameter
+  #     KeyName:  !Ref EC2KeyName
+  #     IamInstanceProfile: !Ref SSMInstanceProfile
+  #     SecurityGroupIds: 
+  #       - Fn::ImportValue:
+  #           !Join ['', ["Danish-", !Ref Environment, "-RDS-Sec-Group" ]]
+  #     Tags:
+  #     - Key: Name
+  #       Value:  !Join ['', ["Danish-", !Ref Environment, "-DB" ]]
+  #     UserData:
+  #       Fn::Base64: |
+  #           #!/bin/bash
+  #           sudo yum update -y
+  #           curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  #           unzip awscliv2.zip
+  #           ./aws/install
+  #           db_username=$(aws ssm get-parameter --name db_username --query 'Parameter.Value' --region us-west-2 --output text)
+  #           db_user_password=$(aws ssm get-parameter --name db_user_password --query 'Parameter.Value' --region us-west-2 --output text)
+  #           db_name=$(aws ssm get-parameter --name db_name --query 'Parameter.Value' --region us-west-2 --output text)
+  #           sudo amazon-linux-extras install -y lamp-mariadb10.2-php7.2
+  #           sudo yum install mysql-server -y
+  #           sudo systemctl enable mariadb
+  #           sudo systemctl start mariadb
+  #           mysql -h localhost -u root -e "create database $db_name"
+  #           mysql -h localhost -u root -e "CREATE USER '$db_username'@'%' IDENTIFIED BY '$db_user_password'"
+  #           mysql -h localhost -u root -e "GRANT ALL PRIVILEGES ON $db_name.* TO '$db_username'@'%' WITH GRANT OPTION"
+  #           sudo yum -y install expect
+  #           MYSQL_PASS=12345
+  #           myPid=$!
+  #           echo "--> Wait 7s to boot up MySQL on pid ${myPid}"
+  #           sleep 7
+  #           echo "--> Set root password"
+  #           expect -f - <<-EOF
+  #             set timeout 10
+  #             spawn mysql_secure_installation
+  #             expect "Enter current password for root (enter for none):"
+  #             send -- "\r"
+  #             expect "Set root password?"
+  #             send -- "y\r"
+  #             expect "New password:"
+  #             send -- "${MYSQL_PASS}\r"
+  #             expect "Re-enter new password:"
+  #             send -- "${MYSQL_PASS}\r"
+  #             expect "Remove anonymous users?"
+  #             send -- "y\r"
+  #             expect "Disallow root login remotely?"
+  #             send -- "n\r"
+  #             expect "Remove test database and access to it?"
+  #             send -- "y\r"sudo
+  #             expect "Reload privilege tables now?"
+  #             send -- "y\r"
+  #             expect eof
+  #           EOF
+  #           echo "--> Kill MySQL on pid ${myPid}"
+  #           kill -9 ${myPid}
+  #     SubnetId:
+  #       Fn::ImportValue:
+  #         !Join ['-', ["Danish", !Ref Environment, "Private-B" ]]
+
+
